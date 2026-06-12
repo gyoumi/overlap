@@ -18,10 +18,17 @@ Built to exercise two of my other projects together:
   round-trips through `Result`, and "best slot" is an `Option` because an
   empty grid has no answer.
 
-Everything is client-side; the event is persisted to localStorage. Add the
+Everything is client-side; events are persisted to localStorage. Add the
 people in your group, paint, and read the result off the heatmap — darker
 cells mean more people are free, and the footer names the best slot found
 so far.
+
+The app keeps multiple events behind `grove/router` hash routes (`#/` for
+the list, `#/event/<id>` per grid), and grid rows are memoized with
+`g.MemoEq` so a paint stroke only re-renders the rows it touches — their
+handlers read the latest state through a `UseRef`, the pattern grove's
+Memo docs describe. Older single-event saves migrate into the workspace
+format on load.
 
 ## Run it
 

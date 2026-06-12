@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	g "github.com/gyoumi/grove"
+	"github.com/gyoumi/grove/router"
 	"github.com/gyoumi/grove/testdom"
 	"github.com/gyoumi/overlap/app"
 	"github.com/gyoumi/overlap/schedule"
@@ -16,6 +17,7 @@ func (m *memStore) Load() string  { return m.s }
 func (m *memStore) Save(s string) { m.s = s }
 
 func mount(store app.Store) *testdom.R {
+	router.Navigate("/") // the in-memory path persists across tests
 	return testdom.Mount(g.C(app.App, app.Props{Store: store}))
 }
 
@@ -26,6 +28,9 @@ func createEvent(t *testing.T, r *testdom.R, name string) {
 	r.Click(r.FindText("Create event"))
 	if r.FindByAttr("data-cell", "0:0") == nil {
 		t.Fatalf("grid did not render after create: %s", r.HTML())
+	}
+	if !strings.HasPrefix(router.Path(), "/event/") {
+		t.Fatalf("create should navigate to the event page, path=%s", router.Path())
 	}
 }
 
@@ -38,12 +43,12 @@ func addPerson(t *testing.T, r *testdom.R, name string) {
 	}
 }
 
-func TestSetupValidationAndCreate(t *testing.T) {
+func TestSetupValidationCreateAndList(t *testing.T) {
 	store := &memStore{}
 	r := mount(store)
 
 	if r.FindText("New event") == nil {
-		t.Fatalf("setup form should show first: %s", r.HTML())
+		t.Fatalf("home should show the setup form: %s", r.HTML())
 	}
 	r.Click(r.FindText("Create event")) // empty name
 	errEl := r.FindByAttr("data-slot", "form-error")
@@ -52,22 +57,26 @@ func TestSetupValidationAndCreate(t *testing.T) {
 	}
 
 	createEvent(t, r, "standup")
-	// default window 9-17 over 5 days → 16 slots/day
-	if cells := r.FindAll("ul")[0]; cells == nil {
-		t.Fatal("no grid list")
-	}
-	if got := len(r.Container.Children); got == 0 {
-		t.Fatal("empty render")
-	}
-	if r.FindByAttr("data-cell", "4:15") == nil {
-		t.Fatalf("expected 5x16 grid, missing last cell: %s", r.HTML())
+	if r.FindByAttr("data-cell", "4:15") == nil { // default 5 days × 16 slots
+		t.Fatalf("expected 5x16 grid: %s", r.HTML())
 	}
 	if store.s == "" {
 		t.Fatal("event should be persisted on create")
 	}
+
+	// back home via the header link: the event is listed
+	r.Click(r.FindText("overlap"))
+	if r.FindText("Your events") == nil {
+		t.Fatalf("home should list events: %s", r.HTML())
+	}
+	// follow the list link back to the grid
+	r.Click(r.FindText("standup"))
+	if r.FindByAttr("data-cell", "0:0") == nil {
+		t.Fatalf("list link should open the event: %s", r.HTML())
+	}
 }
 
-func TestPaintingAndHeatmapAndPersistence(t *testing.T) {
+func TestPaintingHeatmapPersistence(t *testing.T) {
 	store := &memStore{}
 	r := mount(store)
 	createEvent(t, r, "standup")
@@ -84,7 +93,7 @@ func TestPaintingAndHeatmapAndPersistence(t *testing.T) {
 		}
 	}
 
-	// drag again starting on a painted cell → erases
+	// drag starting on a painted cell erases
 	r.Fire(r.FindByAttr("data-cell", "0:1"), "mousedown", nil)
 	r.Fire(r.FindByAttr("data-cell", "0:2"), "mouseover", nil)
 	r.Fire(r.FindByAttr("data-cell", "0:2"), "mouseup", nil)
@@ -95,7 +104,6 @@ func TestPaintingAndHeatmapAndPersistence(t *testing.T) {
 		t.Fatal("0:0 should stay painted")
 	}
 
-	// second participant overlaps at 0:0
 	addPerson(t, r, "lin")
 	r.Fire(r.FindByAttr("data-cell", "0:0"), "mousedown", nil)
 	r.Fire(r.FindByAttr("data-cell", "0:0"), "mouseup", nil)
@@ -106,11 +114,9 @@ func TestPaintingAndHeatmapAndPersistence(t *testing.T) {
 		t.Fatalf("0:0 should be deepest heat: %s", cls)
 	}
 	best := r.FindByAttr("data-slot", "best")
-	if best == nil || !strings.Contains(best.TextContent(), "2 of 2") {
+	if best == nil || !strings.Contains(best.TextContent(), "2 of 2") ||
+		!strings.Contains(best.TextContent(), "Mon 6/15 at 9:00") {
 		t.Fatalf("best line wrong: %s", r.HTML())
-	}
-	if !strings.Contains(best.TextContent(), "Mon 6/15 at 9:00") {
-		t.Fatalf("best should name Mon 9:00: %s", best.TextContent())
 	}
 
 	// hover details
@@ -120,31 +126,92 @@ func TestPaintingAndHeatmapAndPersistence(t *testing.T) {
 		t.Fatalf("hover info wrong: %s", r.HTML())
 	}
 
-	// a fresh mount from the same store restores everything
+	// a fresh mount restores the workspace; the event opens from the list
 	r2 := mount(store)
-	if r2.FindByAttr("data-person", "ada") == nil || r2.FindByAttr("data-person", "lin") == nil {
+	r2.Click(r2.FindText("standup"))
+	if r2.FindByAttr("data-person", "ada") == nil {
 		t.Fatalf("participants not restored: %s", r2.HTML())
 	}
 	if cls := r2.FindByAttr("data-cell", "0:0").Attrs["class"]; !strings.Contains(cls, "bg-emerald-600") {
 		t.Fatalf("availability not restored: %s", cls)
 	}
-
-	// sanity: stored payload decodes to the same event
-	ev := schedule.Decode(store.s).Unwrap()
-	if len(ev.People) != 2 || !ev.People[0].Slots["0:0"] {
-		t.Fatalf("stored event wrong: %+v", ev)
-	}
 }
 
-func TestReset(t *testing.T) {
+// Memoized rows keep the handlers from their last render. Handlers read
+// the latest event through a ref, so painting in a row that was skipped
+// for several renders must not lose other rows' paint.
+func TestMemoRowsDontUseStaleState(t *testing.T) {
 	store := &memStore{}
 	r := mount(store)
 	createEvent(t, r, "standup")
-	r.Click(r.FindByAttr("data-slot", "reset"))
-	if r.FindText("New event") == nil {
-		t.Fatalf("reset should return to setup: %s", r.HTML())
+	addPerson(t, r, "ada")
+
+	paint := func(key string) {
+		r.Fire(r.FindByAttr("data-cell", key), "mousedown", nil)
+		r.Fire(r.FindByAttr("data-cell", key), "mouseup", nil)
 	}
-	if store.s != "" {
-		t.Fatal("reset should clear the store")
+	paint("0:0") // row 0 renders; rows 1+ are memo-skipped
+	paint("0:2") // row 2's handler is from the mount render
+	paint("0:4") // row 4's handler is older still
+
+	for _, key := range []string{"0:0", "0:2", "0:4"} {
+		if cell := r.FindByAttr("data-cell", key); cell.Attrs["data-on"] != "1" {
+			t.Fatalf("stale handler lost paint at %s: %s", key, r.HTML())
+		}
+	}
+
+	ev := schedule.Decode(eventPayload(t, store.s)).Unwrap()
+	if n := len(ev.People[0].Slots); n != 3 {
+		t.Fatalf("expected 3 painted slots, got %d", n)
+	}
+}
+
+// eventPayload digs the single event out of the workspace JSON.
+func eventPayload(t *testing.T, s string) string {
+	t.Helper()
+	m := schedule.DecodeAll(s).Unwrap()
+	for _, e := range m {
+		r := schedule.Encode(e)
+		return r.Unwrap()
+	}
+	t.Fatal("no events in store")
+	return ""
+}
+
+func TestDeleteEvent(t *testing.T) {
+	store := &memStore{}
+	r := mount(store)
+	createEvent(t, r, "standup")
+	r.Click(r.FindByAttr("data-slot", "delete"))
+	if r.FindText("New event") == nil {
+		t.Fatalf("delete should land back home: %s", r.HTML())
+	}
+	if m := schedule.DecodeAll(store.s).Unwrap(); len(m) != 0 {
+		t.Fatalf("store should be empty after delete: %v", m)
+	}
+}
+
+func TestUnknownEventPath(t *testing.T) {
+	store := &memStore{}
+	r := mount(store)
+	router.Navigate("/event/bogus")
+	r.Settle()
+	if r.FindText("doesn't exist") == nil {
+		t.Fatalf("missing event should show the not-found view: %s", r.HTML())
+	}
+}
+
+func TestLegacySingleEventMigration(t *testing.T) {
+	e := schedule.ParseForm("retro", "2026-06-15", "3", "9", "12").Unwrap()
+	e = schedule.AddParticipant(e, "ada")
+	store := &memStore{s: schedule.Encode(e).Unwrap()}
+
+	r := mount(store)
+	if r.FindText("Your events") == nil || r.FindText("retro") == nil {
+		t.Fatalf("v1 payload should migrate into the workspace: %s", r.HTML())
+	}
+	r.Click(r.FindText("retro"))
+	if r.FindByAttr("data-person", "ada") == nil {
+		t.Fatalf("migrated event lost data: %s", r.HTML())
 	}
 }

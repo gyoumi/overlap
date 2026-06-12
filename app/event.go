@@ -11,7 +11,7 @@ import (
 type EventProps struct {
 	Event    schedule.Event
 	OnUpdate func(schedule.Event)
-	OnReset  func()
+	OnDelete func()
 }
 
 // heatClasses maps "fraction of the group available" to a background; index
@@ -42,6 +42,15 @@ type drag struct {
 	value    bool
 }
 
+// viewState is the per-render snapshot the grid handlers read through a
+// ref: memoized rows keep handlers from their last render, so handlers
+// must look up the latest state instead of closing over it.
+type viewState struct {
+	event    schedule.Event
+	active   string
+	onUpdate func(schedule.Event)
+}
+
 // EventView is the heart of the app: pick (or add) a participant, paint
 // availability by dragging across the grid, and read the group heatmap.
 func EventView(p EventProps) *g.Node {
@@ -49,6 +58,9 @@ func EventView(p EventProps) *g.Node {
 	newName, setNewName := g.UseState("")
 	hovered, setHovered := g.UseState("")
 	dragRef := g.UseRef(drag{})
+
+	stateRef := g.UseRef(viewState{})
+	stateRef.Current = viewState{event: p.Event, active: active, onUpdate: p.OnUpdate}
 
 	e := p.Event
 
@@ -62,16 +74,26 @@ func EventView(p EventProps) *g.Node {
 		setNewName("")
 	}
 
-	paint := func(key string) {
-		if active == "" {
+	onDown := func(key string, ev *g.Event) {
+		ev.PreventDefault()
+		s := stateRef.Current
+		if s.active == "" {
 			return
 		}
-		p.OnUpdate(schedule.SetSlot(e, active, key, dragRef.Current.value))
+		on := personHas(s.event, s.active, key)
+		dragRef.Current = drag{painting: true, value: !on}
+		s.onUpdate(schedule.SetSlot(s.event, s.active, key, !on))
 	}
-
-	cellOn := func(key string) bool {
-		person := schedule.FindParticipant(e, active)
-		return person.IsSome() && person.Unwrap().Slots[key]
+	onOver := func(key string) {
+		setHovered(key)
+		if !dragRef.Current.painting {
+			return
+		}
+		s := stateRef.Current
+		if s.active == "" {
+			return
+		}
+		s.onUpdate(schedule.SetSlot(s.event, s.active, key, dragRef.Current.value))
 	}
 
 	dayLabels := schedule.DayLabels(e).UnwrapOrElse(func(error) []string {
@@ -84,8 +106,8 @@ func EventView(p EventProps) *g.Node {
 
 		g.Div(g.Class("flex items-baseline justify-between"),
 			g.H2(g.Class("text-lg font-medium"), e.Name),
-			ui.Button(ui.ButtonProps{Variant: ui.ButtonGhost, Size: ui.ButtonSizeSm, OnClick: func(*g.Event) { p.OnReset() }},
-				g.Data("slot", "reset"), "start over"),
+			ui.Button(ui.ButtonProps{Variant: ui.ButtonGhost, Size: ui.ButtonSizeSm, OnClick: func(*g.Event) { p.OnDelete() }},
+				g.Data("slot", "delete"), "delete event"),
 		),
 
 		// participant picker
@@ -120,10 +142,15 @@ func EventView(p EventProps) *g.Node {
 				g.Textf("Painting %s's availability — click or drag across the grid.", active)),
 		),
 
-		grid(e, active, hovered, dayLabels, cellOn, paint, setHovered, dragRef),
+		grid(e, active, hovered, dayLabels, onDown, onOver),
 
 		footer(e, hovered),
 	)
+}
+
+func personHas(e schedule.Event, name, key string) bool {
+	p := schedule.FindParticipant(e, name)
+	return p.IsSome() && p.Unwrap().Slots[key]
 }
 
 func pill(label string, selected bool, data g.Option, onClick func(*g.Event)) *g.Node {
@@ -137,14 +164,58 @@ func pill(label string, selected bool, data g.Option, onClick func(*g.Event)) *g
 	)
 }
 
+// cellProps is the render-relevant data of one grid cell; rowProps of one
+// row. Rows are memoized on this data, so a paint stroke re-renders only
+// the rows it touches.
+type cellProps struct {
+	Key string
+	Cls string
+	On  bool
+}
+
+type rowProps struct {
+	Label  string
+	Cells  []cellProps
+	OnDown func(string, *g.Event)
+	OnOver func(string)
+}
+
+func rowEq(old, new rowProps) bool {
+	if old.Label != new.Label || len(old.Cells) != len(new.Cells) {
+		return false
+	}
+	for i := range old.Cells {
+		if old.Cells[i] != new.Cells[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func gridRow(p rowProps) *g.Node {
+	cells := []*g.Node{
+		g.Div(g.Class("w-14 pr-2 text-right text-[11px] leading-5 text-muted-foreground"), p.Label),
+	}
+	for _, c := range p.Cells {
+		c := c
+		cells = append(cells, g.Div(
+			g.Key(c.Key),
+			g.Class("h-5 flex-1 cursor-pointer rounded-[2px] transition-colors", c.Cls),
+			g.Data("cell", c.Key),
+			g.AttrIf(c.On, "data-on", "1"),
+			g.OnMouseDown(func(ev *g.Event) { p.OnDown(c.Key, ev) }),
+			g.OnMouseOver(func(*g.Event) { p.OnOver(c.Key) }),
+		))
+	}
+	return g.Li(g.Class("flex gap-px"), cells)
+}
+
 func grid(
 	e schedule.Event,
 	active, hovered string,
 	dayLabels []string,
-	cellOn func(string) bool,
-	paint func(string),
-	setHovered func(string),
-	dragRef *g.Ref[drag],
+	onDown func(string, *g.Event),
+	onOver func(string),
 ) *g.Node {
 	slots := e.SlotsPerDay()
 
@@ -154,47 +225,34 @@ func grid(
 			g.Div(g.Class("flex-1 pb-1 text-center text-xs font-medium text-muted-foreground"), label))
 	}
 
-	rows := []*g.Node{g.Div(g.Class("flex gap-px"), headerRow)}
+	rows := []*g.Node{g.Li(g.Key("head"), g.Class("flex gap-px"), headerRow)}
 	for slot := 0; slot < slots; slot++ {
-		cells := []*g.Node{
-			g.Div(g.Class("w-14 pr-2 text-right text-[11px] leading-5 text-muted-foreground"),
-				g.If(slot%2 == 0, g.Text(e.SlotLabel(slot)))),
+		label := ""
+		if slot%2 == 0 {
+			label = e.SlotLabel(slot)
 		}
+		cells := make([]cellProps, 0, e.Days)
 		for day := 0; day < e.Days; day++ {
 			key := schedule.SlotKey(day, slot)
 			var cls string
+			on := false
 			if active != "" {
 				cls = "bg-muted/40"
-				if cellOn(key) {
+				if personHas(e, active, key) {
 					cls = "bg-primary"
+					on = true
 				}
 			} else {
 				cls = heatClass(e.CountAt(key), len(e.People))
+				if hovered == key {
+					cls += " ring-1 ring-ring"
+				}
 			}
-			k := key
-			cells = append(cells, g.Div(
-				g.Key(k),
-				g.Class("h-5 flex-1 cursor-pointer rounded-[2px] transition-colors", cls),
-				g.ClassIf(hovered == k && active == "", "ring-1 ring-ring"),
-				g.Data("cell", k),
-				g.AttrIf(active != "" && cellOn(k), "data-on", "1"),
-				g.OnMouseDown(func(ev *g.Event) {
-					ev.PreventDefault()
-					if active == "" {
-						return
-					}
-					dragRef.Current = drag{painting: true, value: !cellOn(k)}
-					paint(k)
-				}),
-				g.OnMouseOver(func(*g.Event) {
-					setHovered(k)
-					if dragRef.Current.painting {
-						paint(k)
-					}
-				}),
-			))
+			cells = append(cells, cellProps{Key: key, Cls: cls, On: on})
 		}
-		rows = append(rows, g.Li(g.Key(schedule.SlotKey(-1, slot)), g.Class("flex gap-px"), cells))
+		rows = append(rows,
+			g.MemoEq(gridRow, rowProps{Label: label, Cells: cells, OnDown: onDown, OnOver: onOver}, rowEq).
+				WithKey(schedule.SlotKey(-1, slot)))
 	}
 
 	return g.Div(g.Class("rounded-lg border p-3"),

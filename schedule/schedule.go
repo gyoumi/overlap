@@ -94,6 +94,29 @@ func Decode(s string) Result[Event, error] {
 	return Ok[Event, error](e)
 }
 
+// EncodeAll serializes a whole workspace of events keyed by id.
+func EncodeAll(events map[string]Event) Result[string, error] {
+	__v0, __err0 := json.Marshal(events)
+	if __err0 != nil {
+		return Err[string](__err0)
+	}
+	b := __v0
+	return Ok[string, error](string(b))
+}
+
+// DecodeAll parses a stored workspace. Older single-event payloads fail
+// here; callers fall back to Decode for migration.
+func DecodeAll(s string) Result[map[string]Event, error] {
+	var m map[string]Event
+	if err := json.Unmarshal([]byte(s), &m); err != nil {
+		return Err[map[string]Event](err)
+	}
+	if m == nil {
+		m = map[string]Event{}
+	}
+	return Ok[map[string]Event, error](m)
+}
+
 // FindParticipant looks a participant up by name.
 func FindParticipant(e Event, name string) Option[Participant] {
 	for _, p := range e.People {

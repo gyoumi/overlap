@@ -4,15 +4,17 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	g "github.com/gyoumi/grove"
+	"github.com/gyoumi/grove/router"
 	"github.com/gyoumi/overlap/schedule"
 	"github.com/gyoumi/overlap/ui"
 )
 
-// Store persists the current event between sessions. The browser entry
-// point backs it with localStorage; tests use an in-memory string.
+// Store persists the workspace between sessions. The browser entry point
+// backs it with localStorage; tests use an in-memory string.
 type Store interface {
 	Load() string // "" when nothing is stored
 	Save(s string)
@@ -22,47 +24,150 @@ type Props struct {
 	Store Store
 }
 
-// App switches between the event setup form and the availability grid.
+// App owns the workspace (all events keyed by id) and routes between the
+// home page and individual event grids.
 func App(p Props) *g.Node {
-	event, setEvent := g.UseStateLazy(func() *schedule.Event {
-		if s := p.Store.Load(); s != "" {
-			if r := schedule.Decode(s); r.IsOk() {
-				e := r.Unwrap()
-				return &e
-			}
-		}
-		return nil
+	events, setEvents := g.UseStateLazy(func() map[string]schedule.Event {
+		return loadWorkspace(p.Store)
 	})
 
-	update := func(e schedule.Event) {
-		ev := e
-		setEvent(&ev)
-		if r := schedule.Encode(e); r.IsOk() {
+	persist := func(m map[string]schedule.Event) {
+		setEvents(m)
+		if r := schedule.EncodeAll(m); r.IsOk() {
 			p.Store.Save(r.Unwrap())
 		}
 	}
-	reset := func() {
-		setEvent(nil)
-		p.Store.Save("")
+	update := func(id string, e schedule.Event) {
+		m := cloneEvents(events)
+		m[id] = e
+		persist(m)
+	}
+	remove := func(id string) {
+		m := cloneEvents(events)
+		delete(m, id)
+		persist(m)
 	}
 
 	return g.Div(g.Class("mx-auto flex min-h-svh max-w-3xl flex-col gap-6 p-6 text-foreground"),
 		g.Header(g.Class("flex items-baseline justify-between"),
-			g.H1(g.Class("text-2xl font-semibold tracking-tight"), "overlap"),
+			router.Link("/", g.Class("text-2xl font-semibold tracking-tight text-foreground no-underline"), "overlap"),
 			g.P(g.Class("text-sm text-muted-foreground"), "find where schedules align"),
 		),
-		g.IfElse(event == nil,
-			g.C(SetupForm, SetupProps{OnCreate: update}),
-			g.C(EventView, EventProps{Event: deref(event), OnUpdate: update, OnReset: reset}),
+		router.Routes(
+			router.Route{Pattern: "/", Render: func(router.Params) *g.Node {
+				return g.C(HomePage, HomeProps{
+					Events: events,
+					OnCreate: func(e schedule.Event) {
+						id := newID()
+						update(id, e)
+						router.Navigate("/event/" + id)
+					},
+				})
+			}},
+			router.Route{Pattern: "/event/:id", Render: func(params router.Params) *g.Node {
+				id := params["id"]
+				e, ok := events[id]
+				if !ok {
+					return missingEvent()
+				}
+				return g.C(EventView, EventProps{
+					Event:    e,
+					OnUpdate: func(e schedule.Event) { update(id, e) },
+					OnDelete: func() {
+						remove(id)
+						router.Navigate("/")
+					},
+				})
+			}},
+			router.Route{Pattern: "*", Render: func(router.Params) *g.Node {
+				return missingEvent()
+			}},
 		),
 	)
 }
 
-func deref(e *schedule.Event) schedule.Event {
-	if e == nil {
-		return schedule.Event{}
+func missingEvent() *g.Node {
+	return g.Div(g.Class("flex flex-col items-start gap-3"),
+		g.P(g.Class("text-sm text-muted-foreground"), "That page doesn't exist (anymore)."),
+		router.Link("/", g.Class("text-sm font-medium text-primary underline-offset-4 hover:underline"), "back to your events"),
+	)
+}
+
+func loadWorkspace(store Store) map[string]schedule.Event {
+	s := store.Load()
+	if s == "" {
+		return map[string]schedule.Event{}
 	}
-	return *e
+	if r := schedule.DecodeAll(s); r.IsOk() {
+		return r.Unwrap()
+	}
+	// migrate a v1 single-event payload into the workspace format
+	if r := schedule.Decode(s); r.IsOk() {
+		return map[string]schedule.Event{newID(): r.Unwrap()}
+	}
+	return map[string]schedule.Event{}
+}
+
+func cloneEvents(m map[string]schedule.Event) map[string]schedule.Event {
+	out := make(map[string]schedule.Event, len(m)+1)
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+var idCounter int
+
+func newID() string {
+	idCounter++
+	return fmt.Sprintf("%x-%d", time.Now().UnixNano()&0xFFFFFF, idCounter)
+}
+
+type HomeProps struct {
+	Events   map[string]schedule.Event
+	OnCreate func(schedule.Event)
+}
+
+// HomePage lists existing events and hosts the creation form.
+func HomePage(p HomeProps) *g.Node {
+	ids := sortedIDs(p.Events)
+	return g.Div(g.Class("flex flex-col gap-6"),
+		g.If(len(ids) > 0,
+			g.Div(g.Class("flex flex-col gap-2"),
+				g.H2(g.Class("text-lg font-medium"), "Your events"),
+				g.Ul(g.Class("flex flex-col gap-1"),
+					g.Map(ids, func(id string) *g.Node {
+						e := p.Events[id]
+						return g.Li(g.Key(id),
+							router.Link("/event/"+id,
+								g.Class("flex items-center justify-between rounded-md border px-4 py-3 text-sm no-underline transition-colors hover:bg-accent"),
+								g.Data("event-link", id),
+								g.Span(g.Class("font-medium"), e.Name),
+								g.Span(g.Class("text-xs text-muted-foreground"),
+									g.Textf("%d people · %d days", len(e.People), e.Days)),
+							),
+						)
+					}),
+				),
+			),
+		),
+		g.C(SetupForm, SetupProps{OnCreate: p.OnCreate}),
+	)
+}
+
+func sortedIDs(m map[string]schedule.Event) []string {
+	ids := make([]string, 0, len(m))
+	for id := range m {
+		ids = append(ids, id)
+	}
+	// newest first: ids embed a monotonic counter, but sorting by name is
+	// friendlier for the list
+	for i := 1; i < len(ids); i++ {
+		for j := i; j > 0 && m[ids[j]].Name < m[ids[j-1]].Name; j-- {
+			ids[j], ids[j-1] = ids[j-1], ids[j]
+		}
+	}
+	return ids
 }
 
 type SetupProps struct {
