@@ -1,0 +1,6 @@
+//go:generate go tool warchest generate
+
+// Package ui holds overlap's owned copies of grove ui components (vendored
+// via grove add) plus any local additions. Like the rest of the app it is
+// authored as .warchest source and generated to Go.
+package ui

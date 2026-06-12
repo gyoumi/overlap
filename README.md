@@ -12,11 +12,13 @@ Built to exercise two of my other projects together:
   against grove's `testdom` with no browser.
 - **[warchest](https://github.com/gyoumi/warchest-errors)** — explicit
   error handling for Go (`Option[T]`, `Result[T, E]`, `?` propagation) via
-  code generation. The fallible domain logic lives in
-  [`schedule/schedule.warchest`](schedule/schedule.warchest): form parsing
-  returns `Result[Event, ValidationError]` (a typed error), storage
-  round-trips through `Result`, and "best slot" is an `Option` because an
-  empty grid has no answer.
+  code generation. **Every Go source file in this project is authored as
+  `.warchest`** — the committed `.go` files are all generator output. Most
+  files pass through untouched; the fallible domain logic in
+  [`schedule/schedule.warchest`](schedule/schedule.warchest) uses the
+  extras: form parsing returns `Result[Event, ValidationError]` (a typed
+  error), storage round-trips through `Result`, and "best slot" is an
+  `Option` because an empty grid has no answer.
 
 Everything is client-side; events are persisted to localStorage. Add the
 people in your group, paint, and read the result off the heatmap — darker
@@ -42,12 +44,15 @@ grove serve        # from this directory → http://localhost:8080
 
 ## Develop
 
+Edit the `.warchest` files (never the generated `.go`), then:
+
 ```sh
-go generate ./schedule/        # expand schedule.warchest → schedule.go
+go generate ./...              # expand every *.warchest → *.go
 go test ./app/ ./schedule/     # full UI simulation + domain tests
 grove build                    # production bundle into dist/
 ```
 
-The `app` package takes its storage as an interface, so tests drive the
-entire UI — event creation, drag-painting, heatmap buckets, persistence —
-in plain `go test`.
+The `app` package takes its storage and dark-mode hook as injected
+dependencies, so tests drive the entire UI — event creation,
+drag-painting, heatmap buckets, dark mode, persistence — in plain
+`go test`.
