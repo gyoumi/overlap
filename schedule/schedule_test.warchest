@@ -87,3 +87,16 @@ func TestBestAndParseKey(t *testing.T) {
 		t.Fatal("duplicate participant should be rejected")
 	}
 }
+
+func TestClearSlots(t *testing.T) {
+	e := ParseForm("x", "2026-06-15", "2", "9", "11").Unwrap()
+	e = AddParticipant(e, "ada")
+	e = SetSlot(e, "ada", SlotKey(0, 1), true)
+	cleared := ClearSlots(e)
+	if len(cleared.People) != 1 || len(cleared.People[0].Slots) != 0 {
+		t.Fatalf("ClearSlots: %+v", cleared.People)
+	}
+	if len(e.People[0].Slots) != 1 {
+		t.Fatal("ClearSlots must not mutate the original")
+	}
+}

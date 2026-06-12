@@ -118,3 +118,14 @@ func (e Event) NamesAt(key string) []string {
 	}
 	return names
 }
+
+// ClearSlots returns a copy of the event with every participant's
+// availability emptied.
+func ClearSlots(e Event) Event {
+	people := make([]Participant, len(e.People))
+	for i, p := range e.People {
+		people[i] = Participant{Name: p.Name, Slots: map[string]bool{}}
+	}
+	e.People = people
+	return e
+}

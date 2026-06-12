@@ -182,12 +182,41 @@ func TestDeleteEvent(t *testing.T) {
 	store := &memStore{}
 	r := mount(store)
 	createEvent(t, r, "standup")
+	r.Click(r.FindByAttr("data-slot", "menu-trigger"))
+	if r.FindByAttr("data-slot", "delete") == nil {
+		t.Fatalf("actions menu should open: %s", r.HTML())
+	}
 	r.Click(r.FindByAttr("data-slot", "delete"))
 	if r.FindText("New event") == nil {
 		t.Fatalf("delete should land back home: %s", r.HTML())
 	}
 	if m := schedule.DecodeAll(store.s).Unwrap(); len(m) != 0 {
 		t.Fatalf("store should be empty after delete: %v", m)
+	}
+}
+
+func TestClearAvailabilityViaMenu(t *testing.T) {
+	store := &memStore{}
+	r := mount(store)
+	createEvent(t, r, "standup")
+	addPerson(t, r, "ada")
+	r.Fire(r.FindByAttr("data-cell", "0:0"), "mousedown", nil)
+	r.Fire(r.FindByAttr("data-cell", "0:0"), "mouseup", nil)
+	if r.FindByAttr("data-on", "1") == nil {
+		t.Fatal("cell should be painted before clearing")
+	}
+
+	r.Click(r.FindByAttr("data-slot", "menu-trigger"))
+	r.Click(r.FindByAttr("data-slot", "clear"))
+	if r.FindByAttr("data-slot", "clear") != nil {
+		t.Fatal("menu should close after selecting")
+	}
+	if r.FindByAttr("data-on", "1") != nil {
+		t.Fatalf("availability should be cleared: %s", r.HTML())
+	}
+	ev := schedule.Decode(eventPayload(t, store.s)).Unwrap()
+	if len(ev.People) != 1 || len(ev.People[0].Slots) != 0 {
+		t.Fatalf("store should keep the participant with no slots: %+v", ev.People)
 	}
 }
 

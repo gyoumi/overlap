@@ -58,6 +58,7 @@ func EventView(p EventProps) *g.Node {
 	active, setActive := g.UseState("") // "" = group heatmap view
 	newName, setNewName := g.UseState("")
 	hovered, setHovered := g.UseState("")
+	menuOpen, setMenuOpen := g.UseState(false)
 	dragRef := g.UseRef(drag{})
 
 	stateRef := g.UseRef(viewState{})
@@ -124,12 +125,19 @@ func EventView(p EventProps) *g.Node {
 					ui.Badge(ui.BadgeProps{Variant: ui.BadgeOutline}, window),
 				),
 			),
-			ui.Tooltip(ui.TooltipProps{Label: "delete this event"},
+			ui.Dropdown(ui.DropdownProps{Open: menuOpen, OnClose: func() { setMenuOpen(false) }, Align: ui.PopoverAlignEnd},
 				ui.Button(ui.ButtonProps{
 					Variant: ui.ButtonGhost, Size: ui.ButtonSizeSm,
-					Class:   "text-muted-foreground hover:text-destructive",
-					OnClick: func(*g.Event) { p.OnDelete() },
-				}, g.Data("slot", "delete"), "delete"),
+					Class:   "text-muted-foreground",
+					OnClick: func(*g.Event) { setMenuOpen(!menuOpen) },
+				}, g.Data("slot", "menu-trigger"), "actions ⋯"),
+				ui.DropdownLabel(e.Name),
+				ui.DropdownItem(ui.DropdownItemProps{OnSelect: func() {
+					p.OnUpdate(schedule.ClearSlots(e))
+				}}, g.Data("slot", "clear"), "Clear all availability"),
+				ui.DropdownSeparator(),
+				ui.DropdownItem(ui.DropdownItemProps{OnSelect: func() { p.OnDelete() }, Class: "text-destructive"},
+					g.Data("slot", "delete"), "Delete event"),
 			),
 		),
 
