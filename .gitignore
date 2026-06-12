@@ -1,2 +1,6 @@
 dist/
 /overlap
+
+# all Go sources are authored as .warchest; the committed tree has no .go —
+# bootstrap with: go tool warchest generate ./...
+*.go

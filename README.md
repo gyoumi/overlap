@@ -12,9 +12,10 @@ Built to exercise two of my other projects together:
   against grove's `testdom` with no browser.
 - **[warchest](https://github.com/gyoumi/warchest-errors)** — explicit
   error handling for Go (`Option[T]`, `Result[T, E]`, `?` propagation) via
-  code generation. **Every Go source file in this project is authored as
-  `.warchest`** — the committed `.go` files are all generator output. Most
-  files pass through untouched; the fallible domain logic in
+  code generation. **The repo contains no `.go` files at all** — every Go
+  source is authored as `.warchest` and the generated `.go` stays local
+  (gitignored). Most files pass through the generator untouched; the
+  fallible domain logic in
   [`schedule/schedule.warchest`](schedule/schedule.warchest) uses the
   extras: form parsing returns `Result[Event, ValidationError]` (a typed
   error), storage round-trips through `Result`, and "best slot" is an
@@ -39,7 +40,8 @@ Requires local checkouts of `grove` and `warchest` as sibling directories
 
 ```sh
 go install github.com/gyoumi/grove/cmd/grove@latest   # or build from ../grove
-grove serve        # from this directory → http://localhost:8080
+go tool warchest generate ./...   # expand .warchest → .go (fresh checkouts)
+grove serve                       # from this directory → http://localhost:8080
 ```
 
 ## Develop
@@ -47,10 +49,13 @@ grove serve        # from this directory → http://localhost:8080
 Edit the `.warchest` files (never the generated `.go`), then:
 
 ```sh
-go generate ./...              # expand every *.warchest → *.go
-go test ./app/ ./schedule/     # full UI simulation + domain tests
-grove build                    # production bundle into dist/
+go tool warchest generate ./...   # expand every *.warchest → *.go
+go test ./app/ ./schedule/        # full UI simulation + domain tests
+grove build                       # production bundle into dist/
 ```
+
+(`go generate ./...` also works once the `.go` files exist locally — each
+package's directive is carried in its generated output.)
 
 The `app` package takes its storage and dark-mode hook as injected
 dependencies, so tests drive the entire UI — event creation,
