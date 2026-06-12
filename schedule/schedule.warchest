@@ -19,9 +19,7 @@ func ParseForm(name, startDate, days, startHour, endHour string) Result[Event, V
 	if trimmed == "" {
 		return Err[Event](ValidationError{Field: "name", Msg: "give the event a name"})
 	}
-	if _, err := time.Parse("2006-01-02", strings.TrimSpace(startDate)); err != nil {
-		return Err[Event](ValidationError{Field: "start date", Msg: "use YYYY-MM-DD"})
-	}
+	date := parseDate(startDate)?
 	d := parseRange(days, "days", 1, 14)?
 	sh := parseRange(startHour, "start hour", 0, 23)?
 	eh := parseRange(endHour, "end hour", 1, 24)?
@@ -30,22 +28,36 @@ func ParseForm(name, startDate, days, startHour, endHour string) Result[Event, V
 	}
 	return Ok(Event{
 		Name:      trimmed,
-		StartDate: strings.TrimSpace(startDate),
+		StartDate: date,
 		Days:      d,
 		StartHour: sh,
 		EndHour:   eh,
 	})
 }
 
+// parseDate adapts time.Parse's untyped failure into this package's
+// ValidationError, yielding the normalized date string.
+func parseDate(s string) Result[string, ValidationError] {
+	trimmed := strings.TrimSpace(s)
+	parsed := MapResult(From(time.Parse("2006-01-02", trimmed)), func(time.Time) string { return trimmed })
+	return MapErrTo(parsed, func(error) ValidationError {
+		return ValidationError{Field: "start date", Msg: "use YYYY-MM-DD"}
+	})
+}
+
 func parseRange(s, field string, lo, hi int) Result[int, ValidationError] {
-	n, err := strconv.Atoi(strings.TrimSpace(s))
-	if err != nil {
-		return Err[int](ValidationError{Field: field, Msg: "not a number"})
-	}
+	n := parseInt(s, field)?
 	if n < lo || n > hi {
 		return Err[int](ValidationError{Field: field, Msg: fmt.Sprintf("must be between %d and %d", lo, hi)})
 	}
 	return Ok(n)
+}
+
+// parseInt adapts strconv.Atoi's untyped failure into a ValidationError.
+func parseInt(s, field string) Result[int, ValidationError] {
+	return MapErrTo(From(strconv.Atoi(strings.TrimSpace(s))), func(error) ValidationError {
+		return ValidationError{Field: field, Msg: "not a number"}
+	})
 }
 
 // DayLabels formats each day of the event, e.g. "Mon 6/15".
@@ -67,10 +79,8 @@ func Encode(e Event) Result[string, error] {
 // Decode parses a stored event.
 func Decode(s string) Result[Event, error] {
 	var e Event
-	if err := json.Unmarshal([]byte(s), &e); err != nil {
-		return Err[Event](err)
-	}
-	return Ok(e)
+	err := json.Unmarshal([]byte(s), &e)
+	return From(e, err)
 }
 
 // EncodeAll serializes a whole workspace of events keyed by id.
@@ -83,13 +93,11 @@ func EncodeAll(events map[string]Event) Result[string, error] {
 // here; callers fall back to Decode for migration.
 func DecodeAll(s string) Result[map[string]Event, error] {
 	var m map[string]Event
-	if err := json.Unmarshal([]byte(s), &m); err != nil {
-		return Err[map[string]Event](err)
-	}
+	err := json.Unmarshal([]byte(s), &m)
 	if m == nil {
 		m = map[string]Event{}
 	}
-	return Ok(m)
+	return From(m, err)
 }
 
 // FindParticipant looks a participant up by name.
@@ -115,11 +123,7 @@ func ParseKey(key string) Option[SlotRef] {
 }
 
 func atoiOpt(s string) Option[int] {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return None[int]()
-	}
-	return Some(n)
+	return From(strconv.Atoi(s)).ToOption()
 }
 
 // Best returns the slot where the most people align, or None when nobody

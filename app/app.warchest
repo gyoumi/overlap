@@ -13,6 +13,7 @@ import (
 	"github.com/gyoumi/grove/router"
 	"github.com/gyoumi/overlap/schedule"
 	"github.com/gyoumi/overlap/ui"
+	. "warchest/wc"
 )
 
 // Store persists the workspace between sessions. The browser entry point
@@ -46,9 +47,7 @@ func App(p Props) *g.Node {
 
 	persist := func(m map[string]schedule.Event) {
 		setEvents(m)
-		if r := schedule.EncodeAll(m); r.IsOk() {
-			p.Store.Save(r.Unwrap())
-		}
+		schedule.EncodeAll(m).IfOk(p.Store.Save)
 	}
 	update := func(id string, e schedule.Event) {
 		m := cloneEvents(events)
@@ -140,14 +139,13 @@ func loadWorkspace(store Store) map[string]schedule.Event {
 	if s == "" {
 		return map[string]schedule.Event{}
 	}
-	if r := schedule.DecodeAll(s); r.IsOk() {
-		return r.Unwrap()
-	}
-	// migrate a v1 single-event payload into the workspace format
-	if r := schedule.Decode(s); r.IsOk() {
-		return map[string]schedule.Event{newID(): r.Unwrap()}
-	}
-	return map[string]schedule.Event{}
+	return schedule.DecodeAll(s).UnwrapOrElse(func(error) map[string]schedule.Event {
+		// migrate a v1 single-event payload into the workspace format,
+		// or start fresh when the payload is junk
+		return MapResult(schedule.Decode(s), func(e schedule.Event) map[string]schedule.Event {
+			return map[string]schedule.Event{newID(): e}
+		}).UnwrapOr(map[string]schedule.Event{})
+	})
 }
 
 func cloneEvents(m map[string]schedule.Event) map[string]schedule.Event {
@@ -267,12 +265,9 @@ func SetupForm(p SetupProps) *g.Node {
 	errMsg, setErrMsg := g.UseState("")
 
 	create := func(*g.Event) {
-		r := schedule.ParseForm(name, date, days, startHour, endHour)
-		if r.IsErr() {
-			setErrMsg(r.UnwrapErr().Error())
-			return
-		}
-		p.OnCreate(r.Unwrap())
+		schedule.ParseForm(name, date, days, startHour, endHour).
+			IfErr(func(verr schedule.ValidationError) { setErrMsg(verr.Error()) }).
+			IfOk(p.OnCreate)
 	}
 
 	field := func(id, label, value string, set func(string)) *g.Node {
