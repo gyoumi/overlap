@@ -7,9 +7,10 @@ reveal where schedules align.
 Built to exercise two of my other projects together:
 
 - **[grove](https://github.com/gyoumi/grove)** — a React-style framework
-  for Go compiled to WebAssembly (virtual DOM, hooks, Tailwind/shadcn
-  styling). The whole UI is grove components; the interaction tests run
-  against grove's `testdom` with no browser.
+  for Go compiled to WebAssembly (virtual DOM, hooks, Tailwind-first
+  styling with a themeable design system). The whole UI is grove
+  components; the interaction tests run against grove's `testdom` with no
+  browser.
 - **[warchest](https://github.com/gyoumi/warchest-errors)** — explicit
   error handling for Go (`Option[T]`, `Result[T, E]`, `?` propagation) via
   code generation. **The repo contains no `.go` files at all** — every Go
