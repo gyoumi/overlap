@@ -258,6 +258,21 @@ func TestUnknownEventPath(t *testing.T) {
 	}
 }
 
+func TestComponentsGalleryRenders(t *testing.T) {
+	r := mount(&memStore{})
+	router.Navigate("/components")
+	r.Settle()
+	if r.FindText("Component gallery") == nil {
+		t.Fatal("the /components route should render the gallery")
+	}
+	// a representative spread across the component categories
+	for _, slot := range []string{"button", "badge", "tabs", "accordion", "select-trigger", "table", "radio-group", "slider", "breadcrumb", "menubar"} {
+		if r.FindByAttr("data-slot", slot) == nil {
+			t.Fatalf("gallery is missing the %q component", slot)
+		}
+	}
+}
+
 func TestLegacySingleEventMigration(t *testing.T) {
 	e := schedule.ParseForm("retro", "2026-06-15", "3", "09:00", "12:00").Unwrap()
 	e = schedule.AddParticipant(e, "ada")

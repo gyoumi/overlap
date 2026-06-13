@@ -68,7 +68,8 @@ func App(p Props) *g.Node {
 					"overlap"),
 			),
 			g.Div(g.Class("flex items-center gap-3"),
-				g.Span(g.Class("hidden text-xs text-muted-foreground sm:block"), "find where schedules align"),
+				router.Link("/components", g.Class("hidden text-xs font-medium text-muted-foreground no-underline transition-colors hover:text-foreground sm:block"),
+					"components"),
 				ui.Tooltip(ui.TooltipProps{Label: "toggle dark mode"},
 					ui.Switch(ui.SwitchProps{ID: "dark-mode", Checked: dark, OnChange: setDark}),
 				),
@@ -99,6 +100,9 @@ func App(p Props) *g.Node {
 						router.Navigate("/")
 					},
 				})
+			}},
+			router.Route{Pattern: "/components", Render: func(router.Params) *g.Node {
+				return g.C0(ComponentsPage)
 			}},
 			router.Route{Pattern: "*", Render: func(router.Params) *g.Node {
 				return missingEvent()
