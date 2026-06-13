@@ -4,7 +4,10 @@
 // warchest generator (go generate ./...).
 package schedule
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Event is a scheduling poll: a stretch of days, a window of hours, and the
 // participants' painted availability.
@@ -15,6 +18,34 @@ type Event struct {
 	StartMin  int           `json:"startMin"` // window start, minutes since midnight
 	EndMin    int           `json:"endMin"`   // window end (exclusive), minutes since midnight
 	People    []Participant `json:"people"`
+}
+
+// UnmarshalJSON migrates events persisted by older versions, which stored
+// the window as whole-hour startHour/endHour rather than startMin/endMin.
+// Without this, a stored event would load with a zero-length window and
+// render no availability cells.
+func (e *Event) UnmarshalJSON(b []byte) error {
+	type alias Event // strips this method, so json won't recurse
+	var raw struct {
+		alias
+		StartHour *int `json:"startHour"`
+		EndHour   *int `json:"endHour"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	*e = Event(raw.alias)
+	// New events always have a non-zero window; an all-zero window means
+	// the new fields were absent, so fall back to the legacy hours.
+	if e.StartMin == 0 && e.EndMin == 0 {
+		if raw.StartHour != nil {
+			e.StartMin = *raw.StartHour * 60
+		}
+		if raw.EndHour != nil {
+			e.EndMin = *raw.EndHour * 60
+		}
+	}
+	return nil
 }
 
 // Participant is one person's availability. Slots is keyed by SlotKey.

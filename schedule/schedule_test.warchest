@@ -39,6 +39,22 @@ func TestHalfHourWindow(t *testing.T) {
 	}
 }
 
+// Events saved by older versions stored the window as whole-hour
+// startHour/endHour; they must still load with a usable window so the
+// availability grid keeps its cells.
+func TestDecodeLegacyWindow(t *testing.T) {
+	old := `{"name":"standup","startDate":"2026-06-15","days":5,"startHour":9,"endHour":17,"people":[]}`
+	e := Decode(old).Unwrap()
+	if e.StartMin != 540 || e.EndMin != 1020 || e.SlotsPerDay() != 16 {
+		t.Fatalf("legacy single event not migrated: %+v slots=%d", e, e.SlotsPerDay())
+	}
+	ws := `{"id1":{"name":"x","startDate":"2026-06-15","days":2,"startHour":9,"endHour":11,"people":[]}}`
+	got := DecodeAll(ws).Unwrap()["id1"]
+	if got.SlotsPerDay() != 4 {
+		t.Fatalf("legacy workspace event not migrated: %+v slots=%d", got, got.SlotsPerDay())
+	}
+}
+
 func TestEncodeDecodeRoundTrip(t *testing.T) {
 	e := ParseForm("standup", "2026-06-15", "3", "09:00", "12:00").Unwrap()
 	e = AddParticipant(e, "ada")
