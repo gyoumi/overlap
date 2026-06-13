@@ -3,12 +3,14 @@ package app_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	g "github.com/gyoumi/grove"
 	"github.com/gyoumi/grove/router"
 	"github.com/gyoumi/grove/testdom"
 	"github.com/gyoumi/overlap/app"
 	"github.com/gyoumi/overlap/schedule"
+	"github.com/gyoumi/overlap/ui"
 )
 
 type memStore struct{ s string }
@@ -21,10 +23,30 @@ func mount(store app.Store) *testdom.R {
 	return testdom.Mount(g.C(app.App, app.Props{Store: store}))
 }
 
+// eventStart is the first day of the range createEvent picks: day 1 of the
+// month the calendar opens on (the current month). Tests derive expected
+// day labels from it so they don't depend on the wall-clock date.
+func eventStart() ui.Date {
+	t := ui.Today()
+	return ui.Date{Year: t.Year, Month: t.Month, Day: 1}
+}
+
 func createEvent(t *testing.T, r *testdom.R, name string) {
 	t.Helper()
 	r.Input(r.FindByAttr("id", "name"), name)
-	r.Input(r.FindByAttr("id", "date"), "2026-06-15")
+	// The calendar opens on the current month; days 1 and 5 always exist
+	// there, so picking them is a deterministic 5-day range.
+	start := eventStart()
+	pick := func(day int) {
+		d := ui.Date{Year: start.Year, Month: start.Month, Day: day}
+		cell := r.FindByAttr("data-day", d.ISO())
+		if cell == nil {
+			t.Fatalf("calendar day %s not present: %s", d.ISO(), r.HTML())
+		}
+		r.Click(cell)
+	}
+	pick(1)
+	pick(5)
 	r.Click(r.FindText("Create event"))
 	if r.FindByAttr("data-cell", "0:0") == nil {
 		t.Fatalf("grid did not render after create: %s", r.HTML())
@@ -113,10 +135,14 @@ func TestPaintingHeatmapPersistence(t *testing.T) {
 	if cls := r.FindByAttr("data-cell", "0:0").Attrs["class"]; !strings.Contains(cls, "bg-emerald-600") {
 		t.Fatalf("0:0 should be deepest heat: %s", cls)
 	}
+	// day 0 of the range is eventStart(); the best slot 0:0 reads as that
+	// day at the 9:00 start hour
+	s := eventStart()
+	wantBest := time.Date(s.Year, s.Month, s.Day, 0, 0, 0, 0, time.UTC).Format("Mon 1/2") + " at 9:00"
 	best := r.FindByAttr("data-slot", "best")
 	if best == nil || !strings.Contains(best.TextContent(), "2 of 2") ||
-		!strings.Contains(best.TextContent(), "Mon 6/15 at 9:00") {
-		t.Fatalf("best line wrong: %s", r.HTML())
+		!strings.Contains(best.TextContent(), wantBest) {
+		t.Fatalf("best line wrong (want %q): %s", wantBest, r.HTML())
 	}
 
 	// hover details
