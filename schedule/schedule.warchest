@@ -14,24 +14,24 @@ import (
 
 // ParseForm validates raw form input into an Event. The error type names
 // the only failure mode this can produce, and each `?` below propagates it.
-func ParseForm(name, startDate, days, startHour, endHour string) Result[Event, ValidationError] {
+func ParseForm(name, startDate, days, startTime, endTime string) Result[Event, ValidationError] {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
 		return Err[Event](ValidationError{Field: "name", Msg: "give the event a name"})
 	}
 	date := parseDate(startDate)?
 	d := parseRange(days, "days", 1, 14)?
-	sh := parseRange(startHour, "start hour", 0, 23)?
-	eh := parseRange(endHour, "end hour", 1, 24)?
-	if eh <= sh {
-		return Err[Event](ValidationError{Field: "end hour", Msg: "must be after the start hour"})
+	sm := parseTime(startTime, "start time")?
+	em := parseTime(endTime, "end time")?
+	if em <= sm {
+		return Err[Event](ValidationError{Field: "end time", Msg: "must be after the start time"})
 	}
 	return Ok(Event{
 		Name:      trimmed,
 		StartDate: date,
 		Days:      d,
-		StartHour: sh,
-		EndHour:   eh,
+		StartMin:  sm,
+		EndMin:    em,
 	})
 }
 
@@ -51,6 +51,15 @@ func parseRange(s, field string, lo, hi int) Result[int, ValidationError] {
 		return Err[int](ValidationError{Field: field, Msg: fmt.Sprintf("must be between %d and %d", lo, hi)})
 	}
 	return Ok(n)
+}
+
+// parseTime adapts time.Parse's untyped failure into a ValidationError,
+// yielding minutes since midnight from an "HH:MM" string.
+func parseTime(s, field string) Result[int, ValidationError] {
+	parsed := MapErrTo(From(time.Parse("15:04", strings.TrimSpace(s))), func(error) ValidationError {
+		return ValidationError{Field: field, Msg: "use HH:MM"}
+	})
+	return MapResult(parsed, func(t time.Time) int { return t.Hour()*60 + t.Minute() })
 }
 
 // parseInt adapts strconv.Atoi's untyped failure into a ValidationError.

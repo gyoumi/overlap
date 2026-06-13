@@ -3,27 +3,44 @@ package schedule
 import "testing"
 
 func TestParseFormValidation(t *testing.T) {
-	if r := ParseForm("  ", "2026-06-15", "5", "9", "17"); !r.IsErr() || r.UnwrapErr().Field != "name" {
+	if r := ParseForm("  ", "2026-06-15", "5", "09:00", "17:00"); !r.IsErr() || r.UnwrapErr().Field != "name" {
 		t.Fatalf("blank name should fail on name, got %v", r)
 	}
-	if r := ParseForm("standup", "junk", "5", "9", "17"); !r.IsErr() || r.UnwrapErr().Field != "start date" {
+	if r := ParseForm("standup", "junk", "5", "09:00", "17:00"); !r.IsErr() || r.UnwrapErr().Field != "start date" {
 		t.Fatalf("bad date should fail on start date, got %v", r)
 	}
-	if r := ParseForm("standup", "2026-06-15", "99", "9", "17"); !r.IsErr() || r.UnwrapErr().Field != "days" {
+	if r := ParseForm("standup", "2026-06-15", "99", "09:00", "17:00"); !r.IsErr() || r.UnwrapErr().Field != "days" {
 		t.Fatalf("out-of-range days should fail, got %v", r)
 	}
-	if r := ParseForm("standup", "2026-06-15", "5", "17", "9"); !r.IsErr() || r.UnwrapErr().Field != "end hour" {
-		t.Fatalf("inverted hours should fail, got %v", r)
+	if r := ParseForm("standup", "2026-06-15", "5", "nope", "17:00"); !r.IsErr() || r.UnwrapErr().Field != "start time" {
+		t.Fatalf("bad time should fail on start time, got %v", r)
+	}
+	if r := ParseForm("standup", "2026-06-15", "5", "17:00", "09:00"); !r.IsErr() || r.UnwrapErr().Field != "end time" {
+		t.Fatalf("inverted times should fail, got %v", r)
 	}
 
-	e := ParseForm(" standup ", "2026-06-15", "5", "9", "17").Unwrap()
+	e := ParseForm(" standup ", "2026-06-15", "5", "09:00", "17:00").Unwrap()
 	if e.Name != "standup" || e.Days != 5 || e.SlotsPerDay() != 16 {
 		t.Fatalf("parsed event wrong: %+v", e)
 	}
 }
 
+// Windows can start and end on the half hour, matching the 30-minute grid.
+func TestHalfHourWindow(t *testing.T) {
+	e := ParseForm("x", "2026-06-15", "1", "09:30", "11:00").Unwrap()
+	if e.StartMin != 570 || e.EndMin != 660 || e.SlotsPerDay() != 3 {
+		t.Fatalf("half-hour window wrong: %+v slots=%d", e, e.SlotsPerDay())
+	}
+	if got := e.SlotLabel(0); got != "9:30" {
+		t.Fatalf("slot 0 = %s", got)
+	}
+	if got := e.SlotLabel(2); got != "10:30" {
+		t.Fatalf("slot 2 = %s", got)
+	}
+}
+
 func TestEncodeDecodeRoundTrip(t *testing.T) {
-	e := ParseForm("standup", "2026-06-15", "3", "9", "12").Unwrap()
+	e := ParseForm("standup", "2026-06-15", "3", "09:00", "12:00").Unwrap()
 	e = AddParticipant(e, "ada")
 	e = SetSlot(e, "ada", SlotKey(1, 2), true)
 
@@ -38,7 +55,7 @@ func TestEncodeDecodeRoundTrip(t *testing.T) {
 }
 
 func TestDayLabelsAndSlotLabel(t *testing.T) {
-	e := ParseForm("x", "2026-06-15", "3", "9", "12").Unwrap() // a Monday
+	e := ParseForm("x", "2026-06-15", "3", "09:00", "12:00").Unwrap() // a Monday
 	labels := DayLabels(e).Unwrap()
 	if len(labels) != 3 || labels[0] != "Mon 6/15" || labels[2] != "Wed 6/17" {
 		t.Fatalf("labels: %v", labels)
@@ -52,7 +69,7 @@ func TestDayLabelsAndSlotLabel(t *testing.T) {
 }
 
 func TestBestAndParseKey(t *testing.T) {
-	e := ParseForm("x", "2026-06-15", "2", "9", "11").Unwrap()
+	e := ParseForm("x", "2026-06-15", "2", "09:00", "11:00").Unwrap()
 	if Best(e).IsSome() {
 		t.Fatal("no participants: Best should be None")
 	}
@@ -89,7 +106,7 @@ func TestBestAndParseKey(t *testing.T) {
 }
 
 func TestClearSlots(t *testing.T) {
-	e := ParseForm("x", "2026-06-15", "2", "9", "11").Unwrap()
+	e := ParseForm("x", "2026-06-15", "2", "09:00", "11:00").Unwrap()
 	e = AddParticipant(e, "ada")
 	e = SetSlot(e, "ada", SlotKey(0, 1), true)
 	cleared := ClearSlots(e)

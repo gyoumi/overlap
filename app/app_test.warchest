@@ -34,8 +34,10 @@ func eventStart() ui.Date {
 func createEvent(t *testing.T, r *testdom.R, name string) {
 	t.Helper()
 	r.Input(r.FindByAttr("id", "name"), name)
-	// The calendar opens on the current month; days 1 and 5 always exist
-	// there, so picking them is a deterministic 5-day range.
+	// Open the date picker, then pick a range. The inner calendar opens on
+	// the current month, where days 1 and 5 always exist, so this is a
+	// deterministic 5-day range. The default 9:00–17:00 times are kept.
+	r.Click(r.FindByAttr("data-slot", "date-picker-trigger"))
 	start := eventStart()
 	pick := func(day int) {
 		d := ui.Date{Year: start.Year, Month: start.Month, Day: day}
@@ -257,7 +259,7 @@ func TestUnknownEventPath(t *testing.T) {
 }
 
 func TestLegacySingleEventMigration(t *testing.T) {
-	e := schedule.ParseForm("retro", "2026-06-15", "3", "9", "12").Unwrap()
+	e := schedule.ParseForm("retro", "2026-06-15", "3", "09:00", "12:00").Unwrap()
 	e = schedule.AddParticipant(e, "ada")
 	store := &memStore{s: schedule.Encode(e).Unwrap()}
 

@@ -12,8 +12,8 @@ type Event struct {
 	Name      string        `json:"name"`
 	StartDate string        `json:"startDate"` // YYYY-MM-DD
 	Days      int           `json:"days"`
-	StartHour int           `json:"startHour"` // inclusive, 0-23
-	EndHour   int           `json:"endHour"`   // exclusive, 1-24
+	StartMin  int           `json:"startMin"` // window start, minutes since midnight
+	EndMin    int           `json:"endMin"`   // window end (exclusive), minutes since midnight
 	People    []Participant `json:"people"`
 }
 
@@ -84,17 +84,16 @@ func AddParticipant(e Event, name string) Event {
 	return e
 }
 
-// SlotsPerDay returns how many half-hour slots one day spans.
-func (e Event) SlotsPerDay() int { return (e.EndHour - e.StartHour) * 2 }
+// SlotsPerDay returns how many 30-minute slots the daily window spans.
+func (e Event) SlotsPerDay() int { return (e.EndMin - e.StartMin) / 30 }
 
 // SlotKey identifies a cell in the availability grid.
 func SlotKey(day, slot int) string { return fmt.Sprintf("%d:%d", day, slot) }
 
-// SlotLabel formats a slot index within the event's hour window, e.g. "9:30".
+// SlotLabel formats a slot index within the event's window, e.g. "9:30".
 func (e Event) SlotLabel(slot int) string {
-	h := e.StartHour + slot/2
-	m := (slot % 2) * 30
-	return fmt.Sprintf("%d:%02d", h, m)
+	t := e.StartMin + slot*30
+	return fmt.Sprintf("%d:%02d", t/60, t%60)
 }
 
 // CountAt returns how many participants are available at the given key.
