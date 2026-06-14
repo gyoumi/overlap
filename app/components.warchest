@@ -364,7 +364,7 @@ func ComponentsPage() *g.Node {
 		),
 
 		componentSection("Carousel",
-			g.Div(g.Class("mx-auto max-w-sm"),
+			g.Div(g.Class("mx-auto w-full max-w-sm"),
 				ui.Carousel(ui.CarouselProps{Dots: true},
 					carouselSlide("1", "bg-primary/10"),
 					carouselSlide("2", "bg-emerald-500/10"),
