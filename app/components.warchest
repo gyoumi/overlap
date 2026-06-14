@@ -346,10 +346,108 @@ func ComponentsPage() *g.Node {
 			),
 		),
 
+		componentSection("Charts",
+			g.Div(g.Class("grid gap-4 sm:grid-cols-2"),
+				g.Div(g.Class("rounded-lg border p-4"),
+					ui.TypographySmall("Weekly signups"),
+					ui.Chart(ui.ChartProps{Type: ui.ChartArea, Class: "mt-2 h-40",
+						Series: []ui.ChartSeries{{Values: []float64{12, 19, 14, 23, 28, 24, 33}}},
+						Labels: []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}}),
+				),
+				g.Div(g.Class("rounded-lg border p-4"),
+					ui.TypographySmall("Events per project"),
+					ui.Chart(ui.ChartProps{Type: ui.ChartBar, Class: "mt-2 h-40",
+						Series: []ui.ChartSeries{{Values: []float64{8, 15, 6, 12, 9}}},
+						Labels: []string{"A", "B", "C", "D", "E"}}),
+				),
+			),
+		),
+
+		componentSection("Carousel",
+			g.Div(g.Class("mx-auto max-w-sm"),
+				ui.Carousel(ui.CarouselProps{Dots: true},
+					carouselSlide("1", "bg-primary/10"),
+					carouselSlide("2", "bg-emerald-500/10"),
+					carouselSlide("3", "bg-amber-500/10"),
+				),
+			),
+		),
+
+		componentSection("Sidebar", sidebarDemo()),
+
+		componentSection("Form", g.C0(formDemo)),
+
+		componentSection("Resizable",
+			g.Div(g.Class("h-48"),
+				ui.Resizable(ui.ResizableProps{DefaultFraction: 0.4},
+					g.Div(g.Class("flex h-full items-center justify-center bg-muted/30 text-sm text-muted-foreground"), "Panel"),
+					g.Div(g.Class("flex h-full items-center justify-center text-sm text-muted-foreground"), "Drag the divider →"),
+				),
+			),
+		),
+
 		componentSection("Typography",
 			ui.TypographyH3("The quick brown fox"),
 			ui.TypographyP("Grove renders this paragraph with the design system's prose styles, including ", ui.TypographyInlineCode("inline code"), " and links."),
 			ui.TypographyBlockquote("Make it work, make it right, make it fast."),
+		),
+	)
+}
+
+func carouselSlide(label, bg string) *g.Node {
+	return g.Div(g.Class("flex h-40 items-center justify-center rounded-lg text-3xl font-bold text-foreground/60 "+bg), label)
+}
+
+// sidebarDemo is a mini app shell with a collapsible sidebar.
+func sidebarDemo() *g.Node {
+	return g.Div(g.Class("h-64 overflow-hidden rounded-lg border"),
+		ui.SidebarProvider(
+			ui.Sidebar(
+				ui.SidebarHeader(g.Span(g.Class("px-2 text-sm font-semibold"), "overlap")),
+				ui.SidebarContent(ui.SidebarMenu(
+					ui.SidebarMenuItem(ui.SidebarMenuButton(true, ui.Icon("calendar"), "Events")),
+					ui.SidebarMenuItem(ui.SidebarMenuButton(false, ui.Icon("search"), "Search")),
+					ui.SidebarMenuItem(ui.SidebarMenuButton(false, ui.Icon("clock"), "Recent")),
+				)),
+			),
+			ui.SidebarInset(
+				g.Div(g.Class("flex items-center gap-2 border-b p-2"),
+					ui.SidebarTrigger(),
+					g.Span(g.Class("text-sm font-medium"), "Dashboard"),
+				),
+				g.Div(g.Class("p-4 text-sm text-muted-foreground"), "Toggle the sidebar with the panel button."),
+			),
+		),
+	)
+}
+
+// formDemo is a validated sign-up form built on UseForm.
+func formDemo() *g.Node {
+	f := ui.UseForm(map[string]string{})
+	submit := func(*g.Event) {
+		ok := f.Validate(map[string]func(string) string{
+			"name": func(v string) string {
+				if strings.TrimSpace(v) == "" {
+					return "Name is required."
+				}
+				return ""
+			},
+			"email": func(v string) string {
+				if !strings.Contains(v, "@") {
+					return "Enter a valid email."
+				}
+				return ""
+			},
+		})
+		if ok {
+			ui.Toast("Submitted", ui.ToastOptions{Description: "The form is valid.", Variant: ui.ToastSuccess})
+		}
+	}
+	return g.Div(g.Class("max-w-sm"),
+		ui.FieldGroup(
+			ui.FormField(ui.FormFieldProps{Form: f, Name: "name", Label: "Name", Placeholder: "Ada Lovelace"}),
+			ui.FormField(ui.FormFieldProps{Form: f, Name: "email", Label: "Email", Type: "email", Placeholder: "ada@x.io", Description: "We'll never share it."}),
+			ui.Button(ui.ButtonProps{OnClick: submit}, "Sign up"),
 		),
 	)
 }
