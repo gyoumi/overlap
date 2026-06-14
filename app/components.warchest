@@ -198,7 +198,10 @@ func ComponentsPage() *g.Node {
 					{"Linus Torvalds", "Maintainer", 54},
 					{"Margaret Hamilton", "Director", 88},
 				},
-				Filter:   func(r rosterRow, q string) bool { return strings.Contains(strings.ToLower(r.name+" "+r.role), strings.ToLower(q)) },
+				Filter: func(r rosterRow, q string) bool {
+					hay := strings.ToLower(fmt.Sprintf("%s %s %d", r.name, r.role, r.age))
+					return strings.Contains(hay, strings.ToLower(q))
+				},
 				PageSize: 4,
 			}),
 		),
