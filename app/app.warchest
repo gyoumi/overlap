@@ -82,6 +82,7 @@ func App(p Props) *g.Node {
 					OnCreate: func(e schedule.Event) {
 						id := newID()
 						update(id, e)
+						ui.Toast("Event created", ui.ToastOptions{Description: "Add people and start painting.", Variant: ui.ToastSuccess})
 						router.Navigate("/event/" + id)
 					},
 				})
@@ -97,6 +98,7 @@ func App(p Props) *g.Node {
 					OnUpdate: func(e schedule.Event) { update(id, e) },
 					OnDelete: func() {
 						remove(id)
+						ui.Toast("Event deleted")
 						router.Navigate("/")
 					},
 				})
@@ -116,6 +118,7 @@ func App(p Props) *g.Node {
 			g.A(g.Class("font-medium text-foreground/70 transition-colors hover:text-primary"),
 				g.Href("https://github.com/gyoumi/warchest-errors"), "warchest"),
 		),
+		ui.Toaster(),
 	)
 }
 

@@ -19,7 +19,8 @@ func (m *memStore) Load() string  { return m.s }
 func (m *memStore) Save(s string) { m.s = s }
 
 func mount(store app.Store) *testdom.R {
-	router.Navigate("/") // the in-memory path persists across tests
+	router.Navigate("/")      // the in-memory path persists across tests
+	ui.DismissAllToasts()     // the toast store is global; isolate each mount
 	return testdom.Mount(g.C(app.App, app.Props{Store: store}))
 }
 
