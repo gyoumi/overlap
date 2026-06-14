@@ -12,6 +12,7 @@ import (
 // the pieces a scheduling app would never use on its own.
 func ComponentsPage() *g.Node {
 	sel, setSel := g.UseState("")
+	combo, setCombo := g.UseState("")
 	radio, setRadio := g.UseState("standard")
 	toggles, setToggles := g.UseState([]string{"bold"})
 	slider, setSlider := g.UseState(40.0)
@@ -90,6 +91,13 @@ func ComponentsPage() *g.Node {
 					ui.Select(ui.SelectProps{
 						Value: sel, OnChange: setSel, Placeholder: "Pick a fruit",
 						Options: []ui.SelectOption{{Value: "apple", Label: "Apple"}, {Value: "banana", Label: "Banana"}, {Value: "cherry", Label: "Cherry"}},
+					}),
+				),
+				ui.Field(
+					ui.FieldLabel("", "Combobox (searchable)"),
+					ui.Combobox(ui.ComboboxProps{
+						Value: combo, OnChange: setCombo, Placeholder: "Pick a framework", SearchPlaceholder: "Search frameworks…",
+						Options: []ui.SelectOption{{Value: "grove", Label: "grove"}, {Value: "react", Label: "React"}, {Value: "vue", Label: "Vue"}, {Value: "svelte", Label: "Svelte"}, {Value: "solid", Label: "Solid"}},
 					}),
 				),
 				ui.Field(
@@ -178,6 +186,22 @@ func ComponentsPage() *g.Node {
 			ui.Collapsible(ui.CollapsibleProps{},
 				g.Span(g.Class("text-sm font-medium"), "Advanced options ", ui.Icon("chevron-down", "size-4")),
 				ui.TypographyMuted("Hidden details revealed on toggle."),
+			),
+		),
+
+		componentSection("Command",
+			g.Div(g.Class("max-w-md overflow-hidden rounded-lg border shadow-md"),
+				ui.Command(ui.CommandProps{Placeholder: "Type a command or search…"},
+					ui.CommandGroup{Heading: "Suggestions", Items: []ui.CommandItem{
+						{Value: "Calendar", Label: g.Span(g.Class("flex items-center gap-2"), ui.Icon("calendar", "size-4"), "Calendar")},
+						{Value: "Search", Label: g.Span(g.Class("flex items-center gap-2"), ui.Icon("search", "size-4"), "Search")},
+						{Value: "Clock", Label: g.Span(g.Class("flex items-center gap-2"), ui.Icon("clock", "size-4"), "Clock")},
+					}},
+					ui.CommandGroup{Heading: "Settings", Items: []ui.CommandItem{
+						{Value: "Profile"},
+						{Value: "Billing"},
+					}},
+				),
 			),
 		),
 
