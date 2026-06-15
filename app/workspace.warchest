@@ -1,0 +1,39 @@
+package app
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gyoumi/overlap/schedule"
+	. "warchest/wc"
+)
+
+// loadWorkspace decodes the stored workspace, migrating a legacy single-event
+// payload (v1) into the keyed format and starting fresh when the payload is
+// junk.
+func loadWorkspace(store Store) map[string]schedule.Event {
+	s := store.Load()
+	if s == "" {
+		return map[string]schedule.Event{}
+	}
+	return schedule.DecodeAll(s).UnwrapOrElse(func(error) map[string]schedule.Event {
+		return MapResult(schedule.Decode(s), func(e schedule.Event) map[string]schedule.Event {
+			return map[string]schedule.Event{newID(): e}
+		}).UnwrapOr(map[string]schedule.Event{})
+	})
+}
+
+func cloneEvents(m map[string]schedule.Event) map[string]schedule.Event {
+	out := make(map[string]schedule.Event, len(m)+1)
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+var idCounter int
+
+func newID() string {
+	idCounter++
+	return fmt.Sprintf("%x-%d", time.Now().UnixNano()&0xFFFFFF, idCounter)
+}

@@ -1,0 +1,133 @@
+package app
+
+import (
+	g "github.com/gyoumi/grove"
+	"github.com/gyoumi/overlap/schedule"
+)
+
+// heatClasses maps "fraction of the group available" to a background; index
+// 0 is empty, buckets 1-5 deepen with attendance. (Literal class names so
+// the Tailwind scanner sees them.)
+var heatClasses = []string{
+	"bg-muted/50",
+	"bg-emerald-200 dark:bg-emerald-900",
+	"bg-emerald-300 dark:bg-emerald-800",
+	"bg-emerald-400 dark:bg-emerald-600",
+	"bg-emerald-500",
+	"bg-emerald-600",
+}
+
+func heatClass(count, total int) string {
+	if count == 0 || total == 0 {
+		return heatClasses[0]
+	}
+	bucket := (count*5 + total - 1) / total // ceil(count/total * 5)
+	if bucket > 5 {
+		bucket = 5
+	}
+	return heatClasses[bucket]
+}
+
+// cellProps is the render-relevant data of one grid cell; rowProps of one
+// row. Rows are memoized on this data, so a paint stroke re-renders only
+// the rows it touches.
+type cellProps struct {
+	Key string
+	Cls string
+	On  bool
+}
+
+type rowProps struct {
+	Label  string
+	Cells  []cellProps
+	OnDown func(string, *g.Event)
+	OnOver func(string)
+}
+
+func rowEq(old, new rowProps) bool {
+	if old.Label != new.Label || len(old.Cells) != len(new.Cells) {
+		return false
+	}
+	for i := range old.Cells {
+		if old.Cells[i] != new.Cells[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func gridRow(p rowProps) *g.Node {
+	cells := []*g.Node{
+		g.Div(g.Class("w-14 pr-2.5 text-right text-[11px] leading-[22px] tabular-nums text-muted-foreground"), p.Label),
+	}
+	for _, c := range p.Cells {
+		c := c
+		cells = append(cells, g.Div(
+			g.Key(c.Key),
+			g.Class("h-[22px] flex-1 cursor-pointer rounded-[4px] transition-all duration-150", c.Cls),
+			g.Data("cell", c.Key),
+			g.AttrIf(c.On, "data-on", "1"),
+			g.OnMouseDown(func(ev *g.Event) { p.OnDown(c.Key, ev) }),
+			g.OnMouseOver(func(*g.Event) { p.OnOver(c.Key) }),
+		))
+	}
+	return g.Li(g.Class("flex gap-[3px]"), cells)
+}
+
+func grid(
+	e schedule.Event,
+	active, hovered string,
+	dayLabels []string,
+	onDown func(string, *g.Event),
+	onOver func(string),
+) *g.Node {
+	slots := e.SlotsPerDay()
+
+	headerRow := []*g.Node{g.Div(g.Class("w-14"))}
+	for _, label := range dayLabels {
+		headerRow = append(headerRow,
+			g.Div(g.Class("flex-1 pb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"), label))
+	}
+
+	rows := []*g.Node{g.Li(g.Key("head"), g.Class("flex gap-[3px]"), headerRow)}
+	for slot := 0; slot < slots; slot++ {
+		label := ""
+		if slot%2 == 0 {
+			label = e.SlotLabel(slot)
+		}
+		cells := make([]cellProps, 0, e.Days)
+		for day := 0; day < e.Days; day++ {
+			key := schedule.SlotKey(day, slot)
+			var cls string
+			on := false
+			if active != "" {
+				cls = "bg-muted/50 hover:ring-1 hover:ring-primary/50"
+				if personHas(e, active, key) {
+					cls = "bg-primary shadow-sm shadow-primary/40"
+					on = true
+				}
+			} else {
+				cls = heatClass(e.CountAt(key), len(e.People))
+				if hovered == key {
+					cls += " ring-1 ring-ring"
+				}
+			}
+			cells = append(cells, cellProps{Key: key, Cls: cls, On: on})
+		}
+		rows = append(rows,
+			g.MemoEq(gridRow, rowProps{Label: label, Cells: cells, OnDown: onDown, OnOver: onOver}, rowEq).
+				WithKey(schedule.SlotKey(-1, slot)))
+	}
+
+	legend := []any{g.Class("mt-3 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground"),
+		g.Span("fewer")}
+	for _, hc := range heatClasses {
+		legend = append(legend, g.Span(g.Class("size-3 rounded-[3px]", hc)))
+	}
+	legend = append(legend, g.Span("more"))
+
+	return g.Div(g.Class("rounded-2xl border border-border/60 bg-card/70 p-4 shadow-lg shadow-primary/5 backdrop-blur"),
+		g.Ul(g.Class("flex flex-col gap-[3px]"), rows),
+		g.Div(legend...),
+	)
+}

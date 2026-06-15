@@ -1,0 +1,33 @@
+package app
+
+import (
+	g "github.com/gyoumi/grove"
+	"github.com/gyoumi/overlap/ui"
+)
+
+const chipBase = "flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-sm transition-all"
+
+func personChip(name string, selected bool, onClick func(*g.Event)) *g.Node {
+	return g.Button(
+		g.Class(chipBase),
+		g.ClassIf(selected, "border-primary/50 bg-primary/10 font-medium shadow-sm"),
+		g.ClassIf(!selected, "border-border/60 hover:border-primary/30 hover:bg-accent"),
+		g.Data("person", name),
+		g.OnClick(onClick),
+		ui.Avatar(ui.AvatarProps{Name: name, Size: ui.AvatarSizeSm}),
+		name,
+	)
+}
+
+func groupChip(selected bool, onClick func(*g.Event)) *g.Node {
+	return g.Button(
+		g.Class(chipBase),
+		g.ClassIf(selected, "border-primary/50 bg-primary/10 font-medium shadow-sm"),
+		g.ClassIf(!selected, "border-border/60 hover:border-primary/30 hover:bg-accent"),
+		g.Data("person", "*"),
+		g.OnClick(onClick),
+		g.Span(g.Class("inline-flex size-6 select-none items-center justify-center rounded-full bg-gradient-to-br from-primary to-emerald-500 text-[10px] text-white ring-2 ring-background"),
+			"✦"),
+		"everyone",
+	)
+}

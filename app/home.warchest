@@ -1,0 +1,97 @@
+package app
+
+import (
+	"fmt"
+
+	g "github.com/gyoumi/grove"
+	"github.com/gyoumi/grove/router"
+	"github.com/gyoumi/overlap/schedule"
+	"github.com/gyoumi/overlap/ui"
+)
+
+type HomeProps struct {
+	Events   map[string]schedule.Event
+	OnCreate func(schedule.Event)
+}
+
+// HomePage greets first-time visitors with a hero, lists existing events,
+// and hosts the creation form.
+func HomePage(p HomeProps) *g.Node {
+	ids := sortedIDs(p.Events)
+	return g.Div(g.Class("flex flex-col gap-6"),
+		g.If(len(ids) == 0, hero()),
+		g.If(len(ids) > 0,
+			g.Div(g.Class("flex flex-col gap-3 animate-rise"),
+				g.H2(g.Class("text-lg font-semibold tracking-tight"), "Your events"),
+				g.Ul(g.Class("flex flex-col gap-2.5"),
+					g.Map(ids, func(id string) *g.Node {
+						return eventCard(id, p.Events[id])
+					}),
+				),
+			),
+		),
+		g.C(SetupForm, SetupProps{OnCreate: p.OnCreate}),
+	)
+}
+
+func hero() *g.Node {
+	return g.Div(g.Class("flex flex-col items-center gap-3 py-10 text-center animate-rise"),
+		g.H2(g.Class("max-w-xl text-balance text-4xl font-bold tracking-tight"),
+			"Find the time that ",
+			g.Span(g.Class("bg-gradient-to-r from-primary via-fuchsia-500 to-emerald-500 bg-clip-text text-transparent"),
+				"works for everyone"),
+			".",
+		),
+		g.P(g.Class("max-w-md text-balance text-sm leading-relaxed text-muted-foreground"),
+			"Set up the days and hours, let everyone paint when they're free, and watch the overlap light up."),
+	)
+}
+
+func eventCard(id string, e schedule.Event) *g.Node {
+	window := fmt.Sprintf("%s – %s", e.SlotLabel(0), e.SlotLabel(e.SlotsPerDay()-1))
+	return g.Li(g.Key(id), g.Class("animate-rise"),
+		router.Link("/event/"+id,
+			g.Class("group flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-card/70 px-5 py-4 no-underline shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"),
+			g.Data("event-link", id),
+			g.Div(g.Class("flex flex-col gap-1"),
+				g.Span(g.Class("font-semibold text-foreground transition-colors group-hover:text-primary"), e.Name),
+				g.Span(g.Class("text-xs text-muted-foreground"),
+					g.Textf("%d days · %s", e.Days, window)),
+			),
+			avatarStack(e.People),
+		),
+	)
+}
+
+func avatarStack(people []schedule.Participant) *g.Node {
+	if len(people) == 0 {
+		return g.Span(g.Class("text-xs italic text-muted-foreground"), "no one yet")
+	}
+	const max = 4
+	stack := []any{g.Class("flex -space-x-2")}
+	for i, person := range people {
+		if i == max {
+			break
+		}
+		stack = append(stack, ui.Avatar(ui.AvatarProps{Name: person.Name, Size: ui.AvatarSizeSm}))
+	}
+	if len(people) > max {
+		stack = append(stack, g.Span(
+			g.Class("inline-flex size-6 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background"),
+			g.Textf("+%d", len(people)-max)))
+	}
+	return g.Div(stack...)
+}
+
+func sortedIDs(m map[string]schedule.Event) []string {
+	ids := make([]string, 0, len(m))
+	for id := range m {
+		ids = append(ids, id)
+	}
+	for i := 1; i < len(ids); i++ {
+		for j := i; j > 0 && m[ids[j]].Name < m[ids[j-1]].Name; j-- {
+			ids[j], ids[j-1] = ids[j-1], ids[j]
+		}
+	}
+	return ids
+}

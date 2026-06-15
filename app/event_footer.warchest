@@ -1,0 +1,61 @@
+package app
+
+import (
+	"strings"
+
+	g "github.com/gyoumi/grove"
+	"github.com/gyoumi/overlap/schedule"
+	. "warchest/wc"
+)
+
+func footer(e schedule.Event, hovered string) *g.Node {
+	bestLine := MapOption(bestInfo(e), bestBanner).UnwrapOrElse(func() *g.Node {
+		return g.P(g.Class("text-sm text-muted-foreground"), g.Data("slot", "best"),
+			"No availability painted yet.")
+	})
+
+	var hoverLine *g.Node
+	if hovered != "" {
+		hoverLine = MapOption(schedule.ParseKey(hovered), func(ref schedule.SlotRef) *g.Node {
+			names := e.NamesAt(hovered)
+			txt := "nobody yet"
+			if len(names) > 0 {
+				txt = strings.Join(names, ", ")
+			}
+			return g.P(g.Class("text-xs tabular-nums text-muted-foreground"), g.Data("slot", "hover-info"),
+				g.Textf("%s: %s", e.SlotLabel(ref.Slot), txt))
+		}).UnwrapOr(nil)
+	}
+
+	return g.Div(g.Class("flex flex-col gap-2"), bestLine, hoverLine)
+}
+
+// bestStats couples the winning slot with its display strings.
+type bestStats struct {
+	day, slot    string
+	count, total int
+}
+
+// bestInfo resolves the best slot into displayable parts; None when no
+// availability is painted yet.
+func bestInfo(e schedule.Event) Option[bestStats] {
+	return AndThenOption(schedule.Best(e), func(b schedule.BestSlot) Option[bestStats] {
+		return MapOption(schedule.ParseKey(b.Key), func(ref schedule.SlotRef) bestStats {
+			day := schedule.DayLabels(e).UnwrapOrElse(func(error) []string { return make([]string, e.Days) })[ref.Day]
+			return bestStats{day: day, slot: e.SlotLabel(ref.Slot), count: b.Count, total: b.Total}
+		})
+	})
+}
+
+func bestBanner(bi bestStats) *g.Node {
+	return g.Div(g.Class("flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 animate-pop"),
+		g.Data("slot", "best"),
+		g.Span(g.Class("text-lg leading-none"), "✦"),
+		g.Div(g.Class("flex flex-col"),
+			g.Span(g.Class("text-sm font-semibold text-emerald-700 dark:text-emerald-300"),
+				g.Textf("Best so far: %s at %s", bi.day, bi.slot)),
+			g.Span(g.Class("text-xs text-emerald-700/80 dark:text-emerald-300/80"),
+				g.Textf("%d of %d available", bi.count, bi.total)),
+		),
+	)
+}

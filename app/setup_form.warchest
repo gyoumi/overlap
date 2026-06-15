@@ -1,0 +1,88 @@
+package app
+
+import (
+	"fmt"
+
+	g "github.com/gyoumi/grove"
+	"github.com/gyoumi/overlap/schedule"
+	"github.com/gyoumi/overlap/ui"
+)
+
+type SetupProps struct {
+	OnCreate func(schedule.Event)
+}
+
+// SetupForm collects the event parameters and validates them through
+// schedule.ParseForm; the typed ValidationError drives the inline message.
+func SetupForm(p SetupProps) *g.Node {
+	name, setName := g.UseState("")
+	rangeStart, setRangeStart := g.UseState[*ui.Date](nil)
+	rangeEnd, setRangeEnd := g.UseState[*ui.Date](nil)
+	startTime, setStartTime := g.UseState(ui.Time{Hour: 9})
+	endTime, setEndTime := g.UseState(ui.Time{Hour: 17})
+	errMsg, setErrMsg := g.UseState("")
+
+	// The pickers guarantee a valid date, day count, and times, but
+	// ParseForm stays the single validation seam: the derived strings get
+	// the same bounds checks (incl. the 1-14 day cap and end-after-start)
+	// and `?` pipeline as before. An unpicked range yields an empty date,
+	// which ParseForm reports after the name check.
+	create := func(*g.Event) {
+		date, days := "", ""
+		if rangeStart != nil && rangeEnd != nil {
+			date = rangeStart.ISO()
+			days = fmt.Sprint(ui.DaysBetween(*rangeStart, *rangeEnd) + 1)
+		}
+		schedule.ParseForm(name, date, days, startTime.String(), endTime.String()).
+			IfErr(func(verr schedule.ValidationError) { setErrMsg(verr.Error()) }).
+			IfOk(p.OnCreate)
+	}
+
+	labeled := func(label string, control *g.Node) *g.Node {
+		return g.Div(g.Class("flex flex-col gap-1.5"), ui.Label("", label), control)
+	}
+
+	return ui.Card(g.Class("border-border/60 bg-card/70 shadow-xl shadow-primary/5 backdrop-blur animate-rise"),
+		ui.CardHeader(
+			ui.CardTitle("New event"),
+			ui.CardDescription("Pick the days and hours people should mark themselves available for."),
+		),
+		ui.CardContent(g.Class("flex flex-col gap-4"),
+			labeled("Event name",
+				ui.Input(ui.InputProps{ID: "name", Value: name, OnInput: func(e *g.Event) { setName(e.Value()) }})),
+			g.Div(g.Class("grid gap-4 sm:grid-cols-2"),
+				labeled("Day range",
+					ui.DatePicker(ui.DatePickerProps{
+						Mode:        ui.CalendarRange,
+						Start:       rangeStart,
+						End:         rangeEnd,
+						Placeholder: "Pick the day range",
+						OnRange: func(s, e ui.Date) {
+							ss, ee := s, e
+							setRangeStart(&ss)
+							setRangeEnd(&ee)
+							setErrMsg("")
+						},
+					})),
+				g.Div(g.Class("grid grid-cols-2 gap-3"),
+					labeled("From",
+						ui.TimePicker(ui.TimePickerProps{
+							Value:    &startTime,
+							OnChange: func(t ui.Time) { setStartTime(t); setErrMsg("") },
+						})),
+					labeled("To",
+						ui.TimePicker(ui.TimePickerProps{
+							Value:    &endTime,
+							OnChange: func(t ui.Time) { setEndTime(t); setErrMsg("") },
+						})),
+				),
+			),
+			g.If(errMsg != "",
+				g.P(g.Class("text-sm font-medium text-destructive animate-pop"), g.Data("slot", "form-error"), errMsg),
+			),
+		),
+		ui.CardFooter(
+			ui.Button(ui.ButtonProps{OnClick: create}, "Create event"),
+		),
+	)
+}
