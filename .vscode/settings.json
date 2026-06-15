@@ -1,0 +1,15 @@
+{
+  // overlap compiles to WebAssembly. Analyze with the js/wasm build context so
+  // `syscall/js` imports and grove's //go:build js code (e.g. dom.Mount) resolve
+  // instead of erroring under the host GOOS/GOARCH.
+  //
+  // The Go extension's gopls reads this directly (for the generated .go files),
+  // and warchestls forwards the same "gopls" settings to its own gopls via
+  // workspace/configuration, so .warchest files are covered too.
+  "gopls": {
+    "build.env": {
+      "GOOS": "js",
+      "GOARCH": "wasm"
+    }
+  }
+}
