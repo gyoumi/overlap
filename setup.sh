@@ -11,14 +11,21 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 1. warchest generator: a sibling checkout that satisfies the go.mod `replace`.
+#    The complete toolchain lives on the feat/devcontainer branch, not main.
 warchest_dir="$(cd "$here/.." && pwd)/warchest-errors"
 warchest_repo="git@github.com:gyoumi/warchest-errors.git"
+warchest_branch="feat/devcontainer"
 if [ -d "$warchest_dir/.git" ]; then
   echo "==> warchest generator already present: $warchest_dir"
+  cur="$(git -C "$warchest_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  if [ "$cur" != "$warchest_branch" ]; then
+    echo "!! It's on '$cur', not '$warchest_branch' (the branch with the generator/LSP)."
+    echo "   Fix: git -C '$warchest_dir' checkout $warchest_branch"
+  fi
 else
-  echo "==> Cloning the warchest generator -> $warchest_dir"
+  echo "==> Cloning the warchest generator ($warchest_branch) -> $warchest_dir"
   echo "    (private repo; needs SSH access to github.com/gyoumi/warchest-errors)"
-  git clone "$warchest_repo" "$warchest_dir"
+  git clone -b "$warchest_branch" "$warchest_repo" "$warchest_dir"
 fi
 
 # 2. grove dev-server CLI (`grove serve` / `grove build`). The grove *module* is

@@ -45,8 +45,9 @@ grove serve     # → http://localhost:8080
 ```
 
 - **grove** is a pinned public module, fetched automatically.
-- **warchest** is the generator, a private repo; `setup.sh` clones it to
-  `../warchest-errors` (the `replace` target in `go.mod`), so you need SSH access.
+- **warchest** is the generator (a private repo); its current code is on the
+  `feat/devcontainer` branch, which `setup.sh` clones to `../warchest-errors`
+  (the `replace` target in `go.mod`). You need SSH access to that repo.
 - Put `$(go env GOPATH)/bin` on your `PATH` so `grove` is found.
 
 Already set up? Just regenerate and serve:
