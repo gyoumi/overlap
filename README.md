@@ -36,11 +36,22 @@ format on load.
 
 ## Run it
 
-Requires local checkouts of `grove` and `warchest` as sibling directories
-(see the `replace` directives in go.mod).
+From a fresh clone, one script does everything — clones the warchest generator
+beside this repo, installs the grove CLI, and expands `.warchest` → `.go`:
 
 ```sh
-go install github.com/gyoumi/grove/cmd/grove@latest   # or build from ../grove
+./setup.sh
+grove serve     # → http://localhost:8080
+```
+
+- **grove** is a pinned public module, fetched automatically.
+- **warchest** is the generator, a private repo; `setup.sh` clones it to
+  `../warchest-errors` (the `replace` target in `go.mod`), so you need SSH access.
+- Put `$(go env GOPATH)/bin` on your `PATH` so `grove` is found.
+
+Already set up? Just regenerate and serve:
+
+```sh
 go tool warchest generate ./...   # expand .warchest → .go (fresh checkouts)
 grove serve                       # from this directory → http://localhost:8080
 ```
@@ -57,6 +68,13 @@ grove build                       # production bundle into dist/
 
 (`go generate ./...` also works once the `.go` files exist locally — each
 package's directive is carried in its generated output.)
+
+`.warchest` files get diagnostics, hover, and completion from `warchestls`, the
+LSP proxy in the [warchest repo](https://github.com/gyoumi/warchest-errors#editor-setup);
+install it and your editor plugin with that repo's `setup.sh`. Make sure
+`$(go env GOPATH)/bin` is on the `PATH` your **editor** sees — GUI launches (the
+VS Code snap/Flatpak) don't inherit your shell `PATH`, so they won't find
+`warchestls` or the `gopls` it spawns.
 
 The `app` package takes its storage and dark-mode hook as injected
 dependencies, so tests drive the entire UI — event creation,
